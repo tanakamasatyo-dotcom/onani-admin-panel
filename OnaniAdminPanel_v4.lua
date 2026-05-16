@@ -526,6 +526,7 @@ local TABS = {
     {n="ESP"},
     {n="Character"},
     {n="Physics"},
+    {n="Players"},
     {n="Tools"},
 }
 
@@ -1714,12 +1715,480 @@ CMD.reset=function()
     Notify("reset","全設定リセット")
 end
 
-CMD.help=function()
-    Notify("help 1/4","speed  jump  fly  nofly  noclip  clip  freeze  unfreeze  sit  yeet",6)
-    task.delay(1,function() Notify("help 2/4","tp  tpme  sky  ground  forward  back  up  spin  unspin  size  headsize",6) end)
-    task.delay(2,function() Notify("help 3/4","hp  heal  maxhp  kill  respawn  vis  invis  ghost  unghost  color  glow  noglow",6) end)
-    task.delay(3,function() Notify("help 4/4","gravity  time  day  night  sunset  fog  nofog  bright  fov  bloom  blur  sunrays  dof  rain  snow  explosion  pos  age  id  players  serverinfo  reset",6) end)
+-- ================================================================
+-- HELP ウィンドウ
+-- ================================================================
+local HelpWin = New("Frame",{
+    Name="HelpWin",
+    Size=UDim2.new(0,520,0,460),
+    Position=UDim2.new(0.5,-260,0.5,-230),
+    BackgroundColor3=C.bg,
+    BorderSizePixel=0,
+    ClipsDescendants=true,
+    Visible=false,
+    ZIndex=30,
+},Root)
+New("UICorner",{CornerRadius=UDim.new(0,9)},HelpWin)
+New("UIStroke",{Color=C.accent,Thickness=1.2},HelpWin)
+
+local HelpTBar=New("Frame",{
+    Size=UDim2.new(1,0,0,34),
+    BackgroundColor3=C.tbar,
+    BorderSizePixel=0,ZIndex=31,
+},HelpWin)
+New("UICorner",{CornerRadius=UDim.new(0,9)},HelpTBar)
+New("TextLabel",{
+    Size=UDim2.new(1,-50,1,0),Position=UDim2.new(0,12,0,0),
+    BackgroundTransparency=1,Text="Command Reference",
+    TextColor3=C.accent,TextSize=14,Font=Enum.Font.GothamBold,
+    TextXAlignment=Enum.TextXAlignment.Left,ZIndex=32,
+},HelpTBar)
+local HelpClose=New("TextButton",{
+    Size=UDim2.new(0,16,0,16),Position=UDim2.new(1,-26,0.5,-8),
+    BackgroundColor3=Color3.fromRGB(215,55,55),BorderSizePixel=0,
+    Text="",ZIndex=32,AutoButtonColor=false,
+},HelpTBar)
+New("UICorner",{CornerRadius=UDim.new(1,0)},HelpClose)
+HelpClose.MouseButton1Click:Connect(function()
+    TW(HelpWin,{Size=UDim2.new(0,520,0,0)},0.18,Enum.EasingStyle.Quart,Enum.EasingDirection.In)
+    task.delay(0.18,function() HelpWin.Visible=false; HelpWin.Size=UDim2.new(0,520,0,460) end)
+end)
+
+-- ヘルプドラッグ
+local hDrag=false; local hDragSt; local hPosSt
+HelpTBar.InputBegan:Connect(function(i)
+    if i.UserInputType==Enum.UserInputType.MouseButton1 then
+        hDrag=true; hDragSt=i.Position; hPosSt=HelpWin.Position
+    end
+end)
+UIS.InputChanged:Connect(function(i)
+    if hDrag and i.UserInputType==Enum.UserInputType.MouseMovement then
+        local d=i.Position-hDragSt
+        HelpWin.Position=UDim2.new(hPosSt.X.Scale,hPosSt.X.Offset+d.X,hPosSt.Y.Scale,hPosSt.Y.Offset+d.Y)
+    end
+end)
+UIS.InputEnded:Connect(function(i)
+    if i.UserInputType==Enum.UserInputType.MouseButton1 then hDrag=false end
+end)
+
+-- ヘルプコンテンツ
+local HelpScroll=New("ScrollingFrame",{
+    Size=UDim2.new(1,0,1,-34),
+    Position=UDim2.new(0,0,0,34),
+    BackgroundTransparency=1,BorderSizePixel=0,
+    ScrollBarThickness=3,ScrollBarImageColor3=C.accent,
+    CanvasSize=UDim2.new(0,0,0,0),AutomaticCanvasSize=Enum.AutomaticSize.Y,
+    ZIndex=31,
+},HelpWin)
+New("UIPadding",{PaddingTop=UDim.new(0,10),PaddingLeft=UDim.new(0,12),PaddingRight=UDim.new(0,12),PaddingBottom=UDim.new(0,10)},HelpScroll)
+New("UIListLayout",{Padding=UDim.new(0,3),SortOrder=Enum.SortOrder.LayoutOrder},HelpScroll)
+
+local HELP_DATA = {
+    {"MOVEMENT",{
+        {"speed [n]",      "移動速度を n に変更  (default: 16)"},
+        {"jump [n]",       "ジャンプ力を n に変更  (default: 50)"},
+        {"fly",            "飛行ON  WASD+Space/Ctrl  Shift=高速"},
+        {"nofly",          "飛行OFF"},
+        {"noclip",         "ノークリップON  (壁を通り抜け)"},
+        {"clip",           "ノークリップOFF  (コリジョン復元)"},
+        {"freeze",         "キャラクターをその場で固定"},
+        {"unfreeze",       "固定解除"},
+        {"sit",            "座る"},
+        {"tp [x] [y] [z]", "座標にテレポート"},
+        {"tpme [name]",    "指定プレイヤーにTP"},
+        {"sky",            "高度500にTP"},
+        {"ground",         "地面 (Y=5) にTP"},
+        {"forward [n]",    "前方 n スタッズにTP (default: 40)"},
+        {"back [n]",       "後方 n スタッズにTP (default: 40)"},
+        {"up [n]",         "上方 n スタッズにTP (default: 40)"},
+        {"yeet",           "ランダム方向に吹き飛ぶ"},
+    }},
+    {"CHARACTER",{
+        {"hp [n]",         "HPを n にセット"},
+        {"heal",           "HP全回復"},
+        {"maxhp [n]",      "最大HPを n にセット"},
+        {"kill",           "自分を即死"},
+        {"respawn  / r",   "リスポーン"},
+        {"vis",            "キャラを表示"},
+        {"invis",          "キャラを透明化"},
+        {"ghost",          "ゴーストモード (透明+コリジョン無効)"},
+        {"unghost",        "ゴースト解除"},
+        {"spin [spd]",     "キャラをスピン (default: 10)"},
+        {"unspin",         "スピン停止"},
+        {"size [n]",       "キャラ全体のスケール変更"},
+        {"headsize [n]",   "頭のスケール変更"},
+        {"color [name]",   "ボディカラー変更  red/blue/green/yellow/white/black/pink/orange/purple/cyan"},
+        {"glow [color]",   "PointLight発光  blue/red/green/yellow/white/purple/pink/orange"},
+        {"noglow",         "発光OFF"},
+    }},
+    {"WORLD / LIGHTING",{
+        {"gravity [n]",    "重力変更  (default: 196)"},
+        {"time [0-24]",    "時刻変更"},
+        {"day",            "昼プリセット"},
+        {"night",          "夜プリセット"},
+        {"sunset",         "夕焼けプリセット"},
+        {"fog [dist]",     "フォグON  (距離指定)"},
+        {"nofog",          "フォグOFF"},
+        {"bright [n]",     "明るさ変更"},
+        {"fov [n]",        "視野角変更"},
+        {"bloom",          "ブルームエフェクトON"},
+        {"nobloom",        "ブルームOFF"},
+        {"blur [n]",       "ブラーON"},
+        {"noblur",         "ブラーOFF"},
+        {"sunrays",        "SunRaysON"},
+        {"nosunrays",      "SunRaysOFF"},
+        {"dof",            "被写界深度ON"},
+        {"nodof",          "被写界深度OFF"},
+        {"rain",           "雨エフェクト"},
+        {"snow",           "雪エフェクト"},
+        {"norain / nosnow","天気クリア"},
+        {"explosion [r]",  "自位置に爆発  (半径 default: 25)"},
+    }},
+    {"INFO",{
+        {"pos  / p",       "現在座標を表示"},
+        {"age",            "アカウント日数を表示"},
+        {"id",             "UserIDを表示"},
+        {"gametime",       "ゲーム内経過時間"},
+        {"players",        "プレイヤー一覧"},
+        {"serverinfo",     "Server Infoタブを開く"},
+    }},
+    {"CAMERA",{
+        {"1p",             "一人称カメラ"},
+        {"3p",             "三人称カメラ (通常)"},
+        {"freecam",        "Freecamタブを開く"},
+    }},
+    {"TARGET (Players タブ)",{
+        {"killall",        "全プレイヤーの位置に爆発を生成"},
+        {"kill [name]",    "指定プレイヤーの位置に爆発を生成"},
+        {"tpall",          "自分の位置に全員をTP (要ServerScript)"},
+    }},
+    {"MISC",{
+        {"reset",          "全設定を初期値に戻す"},
+        {"help",           "このウィンドウを表示"},
+    }},
+}
+
+local function HelpSec(label)
+    local f=New("Frame",{Size=UDim2.new(1,0,0,22),BackgroundTransparency=1,ZIndex=32},HelpScroll)
+    New("TextLabel",{Size=UDim2.new(1,0,1,-5),BackgroundTransparency=1,
+        Text=label,TextColor3=C.accent,TextSize=10,Font=Enum.Font.GothamBold,
+        TextXAlignment=Enum.TextXAlignment.Left,ZIndex=33},f)
+    New("Frame",{Size=UDim2.new(1,0,0,1),Position=UDim2.new(0,0,1,-1),
+        BackgroundColor3=C.border,BorderSizePixel=0,ZIndex=32},f)
 end
+
+local function HelpRow(cmd, desc, idx)
+    local row=New("Frame",{
+        Size=UDim2.new(1,0,0,24),
+        BackgroundColor3=idx%2==0 and C.panel or Color3.fromRGB(17,18,28),
+        BorderSizePixel=0,ZIndex=32,
+    },HelpScroll)
+    New("UICorner",{CornerRadius=UDim.new(0,4)},row)
+    New("TextLabel",{
+        Size=UDim2.new(0.38,0,1,0),Position=UDim2.new(0,8,0,0),
+        BackgroundTransparency=1,Text=cmd,
+        TextColor3=Color3.fromRGB(120,200,255),TextSize=11,
+        Font=Enum.Font.Code,TextXAlignment=Enum.TextXAlignment.Left,ZIndex=33,
+    },row)
+    New("TextLabel",{
+        Size=UDim2.new(0.62,-8,1,0),Position=UDim2.new(0.38,0,0,0),
+        BackgroundTransparency=1,Text=desc,
+        TextColor3=C.text,TextSize=11,
+        Font=Enum.Font.Gotham,TextXAlignment=Enum.TextXAlignment.Left,ZIndex=33,
+    },row)
+end
+
+local rowIdx=0
+for _,section in ipairs(HELP_DATA) do
+    HelpSec(section[1])
+    for _,entry in ipairs(section[2]) do
+        rowIdx=rowIdx+1
+        HelpRow(entry[1],entry[2],rowIdx)
+    end
+end
+
+local function OpenHelp()
+    HelpWin.Visible=true
+    HelpWin.Size=UDim2.new(0,520,0,0)
+    TW(HelpWin,{Size=UDim2.new(0,520,0,460)},0.3,Enum.EasingStyle.Back)
+end
+
+CMD.help=function() OpenHelp() end
+
+-- ================================================================
+-- PAGE: Players (プレイヤー管理)
+-- ================================================================
+do
+    local pg=Pages["Players"]
+    local selectedPlayer=nil
+    local selectedBtn=nil
+
+    Sec(pg,"Player Select")
+
+    -- 選択中プレイヤー表示
+    local selLabel=New("TextLabel",{
+        Size=UDim2.new(1,0,0,26),
+        BackgroundColor3=Color3.fromRGB(25,26,42),
+        BorderSizePixel=0,
+        Text="選択中: なし",
+        TextColor3=C.sub,TextSize=12,
+        Font=Enum.Font.GothamSemibold,ZIndex=7,
+    },pg)
+    New("UICorner",{CornerRadius=UDim.new(0,5)},selLabel)
+    New("UIPadding",{PaddingLeft=UDim.new(0,8)},selLabel)
+
+    -- プレイヤーリスト
+    local plListFrame=New("Frame",{
+        Size=UDim2.new(1,0,0,4),
+        BackgroundTransparency=1,
+        AutomaticSize=Enum.AutomaticSize.Y,
+        ZIndex=6,
+    },pg)
+    New("UIListLayout",{Padding=UDim.new(0,3),SortOrder=Enum.SortOrder.LayoutOrder},plListFrame)
+
+    local function BuildPlayerList()
+        for _,c in pairs(plListFrame:GetChildren()) do
+            if not c:IsA("UIListLayout") then c:Destroy() end
+        end
+        selectedPlayer=nil; selectedBtn=nil
+        selLabel.Text="選択中: なし"
+        selLabel.TextColor3=C.sub
+
+        for _,pl in pairs(Players:GetPlayers()) do
+            if pl==LP then
+                -- 自分はグレーアウト
+                local row=New("Frame",{
+                    Size=UDim2.new(1,0,0,32),
+                    BackgroundColor3=Color3.fromRGB(18,19,30),
+                    BorderSizePixel=0,ZIndex=7,
+                },plListFrame)
+                New("UICorner",{CornerRadius=UDim.new(0,5)},row)
+                New("TextLabel",{
+                    Size=UDim2.new(1,-10,1,0),Position=UDim2.new(0,10,0,0),
+                    BackgroundTransparency=1,
+                    Text=pl.Name.."  (自分)",
+                    TextColor3=C.sub,TextSize=12,
+                    Font=Enum.Font.Gotham,TextXAlignment=Enum.TextXAlignment.Left,ZIndex=8,
+                },row)
+            else
+                local isSelected=false
+                local row=New("TextButton",{
+                    Size=UDim2.new(1,0,0,32),
+                    BackgroundColor3=C.panel,
+                    BorderSizePixel=0,Text="",AutoButtonColor=false,ZIndex=7,
+                },plListFrame)
+                New("UICorner",{CornerRadius=UDim.new(0,5)},row)
+
+                -- アバターっぽいドット
+                local dot=New("Frame",{
+                    Size=UDim2.new(0,8,0,8),Position=UDim2.new(0,10,0.5,-4),
+                    BackgroundColor3=C.green,BorderSizePixel=0,ZIndex=8,
+                },row)
+                New("UICorner",{CornerRadius=UDim.new(1,0)},dot)
+
+                New("TextLabel",{
+                    Size=UDim2.new(1,-80,1,0),Position=UDim2.new(0,24,0,0),
+                    BackgroundTransparency=1,
+                    Text=pl.Name,
+                    TextColor3=C.text,TextSize=12,
+                    Font=Enum.Font.GothamSemibold,TextXAlignment=Enum.TextXAlignment.Left,ZIndex=8,
+                },row)
+
+                -- 距離表示
+                local distLbl=New("TextLabel",{
+                    Size=UDim2.new(0,55,1,0),Position=UDim2.new(1,-58,0,0),
+                    BackgroundTransparency=1,Text="---m",
+                    TextColor3=C.sub,TextSize=11,
+                    Font=Enum.Font.Code,TextXAlignment=Enum.TextXAlignment.Right,ZIndex=8,
+                },row)
+                New("UIPadding",{PaddingRight=UDim.new(0,6)},distLbl)
+
+                -- 距離リアルタイム更新
+                RS.Heartbeat:Connect(function()
+                    local myHRP=GetHRP()
+                    local pHRP=pl.Character and pl.Character:FindFirstChild("HumanoidRootPart")
+                    if myHRP and pHRP then
+                        distLbl.Text=math.floor((myHRP.Position-pHRP.Position).Magnitude).."m"
+                    else
+                        distLbl.Text="---m"
+                    end
+                end)
+
+                row.MouseEnter:Connect(function()
+                    if not isSelected then
+                        TW(row,{BackgroundColor3=C.panel:Lerp(Color3.new(1,1,1),0.07)},0.1)
+                    end
+                end)
+                row.MouseLeave:Connect(function()
+                    if not isSelected then TW(row,{BackgroundColor3=C.panel},0.1) end
+                end)
+                row.MouseButton1Click:Connect(function()
+                    -- 前の選択解除
+                    if selectedBtn then
+                        TW(selectedBtn,{BackgroundColor3=C.panel},0.15)
+                    end
+                    selectedPlayer=pl
+                    selectedBtn=row
+                    isSelected=true
+                    TW(row,{BackgroundColor3=C.accent:Lerp(C.panel,0.5)},0.15)
+                    selLabel.Text="選択中: "..pl.Name
+                    selLabel.TextColor3=C.accent
+                    Notify("Select",pl.Name.."を選択しました")
+                end)
+            end
+        end
+    end
+
+    BuildPlayerList()
+    Players.PlayerAdded:Connect(function() task.defer(BuildPlayerList) end)
+    Players.PlayerRemoving:Connect(function() task.defer(BuildPlayerList) end)
+
+    Btn(pg,"Refresh List",Color3.fromRGB(55,60,100),BuildPlayerList)
+
+    -- ターゲットアクション
+    Sec(pg,"Target Actions  (選択したプレイヤーに実行)")
+
+    -- Explosionで位置攻撃
+    Btn(pg,"Kill Target  (Explosion)",C.red,function()
+        if not selectedPlayer then Notify("Target","プレイヤーを選択してください"); return end
+        local pHRP=selectedPlayer.Character and selectedPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if not pHRP then Notify("Target","キャラが見つかりません"); return end
+        local e=Instance.new("Explosion")
+        e.Position=pHRP.Position
+        e.BlastRadius=20
+        e.BlastPressure=9e5
+        e.DestroyJointRadiusPercent=0
+        e.Parent=WS
+        Notify("Kill",selectedPlayer.Name.."にExplosionを生成")
+    end)
+
+    Btn(pg,"Yeet Target  (Launch Up)",C.yellow,function()
+        if not selectedPlayer then Notify("Target","プレイヤーを選択してください"); return end
+        local pHRP=selectedPlayer.Character and selectedPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if not pHRP then Notify("Target","キャラが見つかりません"); return end
+        -- 相手HRPにBodyVelocity
+        local bv=New("BodyVelocity",{
+            Velocity=Vector3.new(0,400,0),
+            MaxForce=Vector3.new(0,1e6,0),
+        },pHRP)
+        Debris:AddItem(bv,0.15)
+        Notify("Yeet",selectedPlayer.Name.."を吹き飛ばした")
+    end)
+
+    Btn(pg,"TP to Target",C.accent,function()
+        if not selectedPlayer then Notify("Target","プレイヤーを選択してください"); return end
+        local pHRP=selectedPlayer.Character and selectedPlayer.Character:FindFirstChild("HumanoidRootPart")
+        local myHRP=GetHRP()
+        if pHRP and myHRP then
+            myHRP.CFrame=pHRP.CFrame*CFrame.new(3,0,3)
+            Notify("TP",selectedPlayer.Name.."にTP")
+        end
+    end)
+
+    Btn(pg,"Spectate Target  (Freecam追跡)",Color3.fromRGB(80,55,130),function()
+        if not selectedPlayer then Notify("Target","プレイヤーを選択してください"); return end
+        local pHRP=selectedPlayer.Character and selectedPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if not pHRP then Notify("Target","キャラが見つかりません"); return end
+        -- FreecamをターゲットのHRP後方にセット
+        SetTab("Freecam")
+        Notify("Spectate",selectedPlayer.Name.."を追跡 → FreecamタブでStartを押してください")
+    end)
+
+    Btn(pg,"Copy Name to CMD",Color3.fromRGB(55,65,110),function()
+        if not selectedPlayer then Notify("Target","プレイヤーを選択してください"); return end
+        CmdIn.Text="tpme "..selectedPlayer.Name
+        Notify("CMD","コマンドバーにセット: tpme "..selectedPlayer.Name)
+    end)
+
+    -- ALL アクション
+    Sec(pg,"All Players Actions")
+
+    Btn(pg,"Kill All  (Explosion x全員)",C.red,function()
+        local count=0
+        for _,pl in pairs(Players:GetPlayers()) do
+            if pl~=LP then
+                local pHRP=pl.Character and pl.Character:FindFirstChild("HumanoidRootPart")
+                if pHRP then
+                    local e=Instance.new("Explosion")
+                    e.Position=pHRP.Position
+                    e.BlastRadius=18
+                    e.BlastPressure=9e5
+                    e.DestroyJointRadiusPercent=0
+                    e.Parent=WS
+                    count=count+1
+                end
+            end
+        end
+        Notify("Kill All",count.."人にExplosionを生成")
+    end)
+
+    Btn(pg,"Yeet All  (Launch Up)",C.yellow,function()
+        local count=0
+        for _,pl in pairs(Players:GetPlayers()) do
+            if pl~=LP then
+                local pHRP=pl.Character and pl.Character:FindFirstChild("HumanoidRootPart")
+                if pHRP then
+                    local bv=New("BodyVelocity",{Velocity=Vector3.new(0,400,0),MaxForce=Vector3.new(0,1e6,0)},pHRP)
+                    Debris:AddItem(bv,0.15); count=count+1
+                end
+            end
+        end
+        Notify("Yeet All",count.."人を吹き飛ばした")
+    end)
+
+    Btn(pg,"Show All Positions",C.panel,function()
+        local lines={}
+        for _,pl in pairs(Players:GetPlayers()) do
+            if pl~=LP and pl.Character then
+                local pHRP=pl.Character:FindFirstChild("HumanoidRootPart")
+                if pHRP then
+                    local p=pHRP.Position
+                    table.insert(lines,("%-16s  %.0f,%.0f,%.0f"):format(pl.Name,p.X,p.Y,p.Z))
+                end
+            end
+        end
+        Notify("Positions",table.concat(lines," | "),8)
+    end)
+end
+
+-- Players コマンド
+CMD.killall=function()
+    local n=0
+    for _,pl in pairs(Players:GetPlayers()) do
+        if pl~=LP then
+            local pHRP=pl.Character and pl.Character:FindFirstChild("HumanoidRootPart")
+            if pHRP then
+                local e=Instance.new("Explosion")
+                e.Position=pHRP.Position; e.BlastRadius=18
+                e.BlastPressure=9e5; e.DestroyJointRadiusPercent=0; e.Parent=WS
+                n=n+1
+            end
+        end
+    end
+    Notify("killall",n.."人にExplosion")
+end
+
+CMD.killtarget=function(a)
+    local pl=FindPlayer(a[1] or "")
+    if not pl then Notify("killtarget","見つからない"); return end
+    local pHRP=pl.Character and pl.Character:FindFirstChild("HumanoidRootPart")
+    if not pHRP then Notify("killtarget","キャラなし"); return end
+    local e=Instance.new("Explosion")
+    e.Position=pHRP.Position; e.BlastRadius=20
+    e.BlastPressure=9e5; e.DestroyJointRadiusPercent=0; e.Parent=WS
+    Notify("killtarget",pl.Name.."にExplosion")
+end
+CMD.kt=CMD.killtarget
+
+CMD.yeettarget=function(a)
+    local pl=FindPlayer(a[1] or "")
+    if not pl then Notify("yeettarget","見つからない"); return end
+    local pHRP=pl.Character and pl.Character:FindFirstChild("HumanoidRootPart")
+    if not pHRP then return end
+    local bv=New("BodyVelocity",{Velocity=Vector3.new(0,400,0),MaxForce=Vector3.new(0,1e6,0)},pHRP)
+    Debris:AddItem(bv,0.15); Notify("yeettarget",pl.Name.."を吹き飛ばした")
+end
+CMD.yt=CMD.yeettarget
 
 -- Exec
 local function Exec(raw)
